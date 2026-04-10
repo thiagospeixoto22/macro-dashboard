@@ -2,7 +2,7 @@ import { withCache } from './cache.js';
 import { fetchJson } from './http.js';
 
 const FRED_BASE = 'https://api.stlouisfed.org/fred/series/observations';
-const TTL = 6 * 60 * 60 * 1000;
+const TTL = 60 * 60 * 1000;
 
 export async function fetchFredSeries(seriesId, options = {}) {
   const apiKey = process.env.FRED_API_KEY;

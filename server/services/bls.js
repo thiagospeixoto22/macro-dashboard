@@ -2,7 +2,7 @@ import { withCache } from './cache.js';
 import { fetchJson } from './http.js';
 
 const BLS_BASE = 'https://api.bls.gov/publicAPI/v2/timeseries/data/';
-const TTL = 12 * 60 * 60 * 1000;
+const TTL = 60 * 60 * 1000;
 
 export async function fetchBlsSeries(seriesId, options = {}) {
   const endYear = new Date().getFullYear();
@@ -17,6 +17,7 @@ export async function fetchBlsSeries(seriesId, options = {}) {
         seriesid: [seriesId],
         startyear: String(startYear),
         endyear: String(endYear),
+        calculations: true,
       };
       if (process.env.BLS_API_KEY) payload.registrationKey = process.env.BLS_API_KEY;
 

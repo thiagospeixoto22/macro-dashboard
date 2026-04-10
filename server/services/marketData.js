@@ -2,7 +2,7 @@ import Papa from 'papaparse';
 import { withCache } from './cache.js';
 import { fetchJson, fetchText } from './http.js';
 
-const TTL = 24 * 60 * 60 * 1000;
+const TTL = 60 * 60 * 1000;
 
 function parseStooqCsv(csv) {
   const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });

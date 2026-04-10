@@ -29,7 +29,6 @@ import {
   fetchAlphaVantageCommodity,
   fetchAlphaVantageEquity,
   fetchAlphaVantageFx,
-  fetchAlphaVantageQuote,
   fetchFmpHistory,
   fetchGenericTickerHistory,
   fetchStooqHistory,
@@ -441,7 +440,7 @@ async function buildDashboard(force = false) {
       id: 'commodity_basket',
       name: 'Commodity Basket Signal',
       series: commodityBasket,
-      sourceLabel: 'Derived from GLD, CPER, USO',
+      sourceLabel: 'Derived from GLD proxy, FRED copper, FRED WTI',
       explanation: 'Simple free-data basket averaging gold, copper, and crude proxies.',
       unit: 'index',
     },
@@ -736,26 +735,22 @@ app.get('/api/dashboard', async (req, res) => {
 app.get('/api/quote/:ticker', async (req, res) => {
   try {
     const ticker = req.params.ticker.toUpperCase();
+    const force = req.query.force === '1';
 
-    const quote = await fetchAlphaVantageQuote(ticker);
+    const historyResult = await fetchGenericTickerHistory(ticker, { force });
+    const series = cleanSeries(historyResult.series || []);
+    const latestPoint = series.at(-1) || null;
+    const previousPoint = series.length > 1 ? series.at(-2) : null;
 
-    let series = [];
-    try {
-      const historyResult = await fetchGenericTickerHistory(ticker);
-      series = historyResult.series || [];
-    } catch {
-      // quote still works even if history fails
+    if (!latestPoint) {
+      return res.status(404).json({ error: `No market data returned for ${ticker}` });
     }
 
     res.json({
       ticker,
-      provider: 'Alpha Vantage',
-      latest: quote.date
-        ? { date: quote.date, value: quote.price }
-        : { date: null, value: quote.price },
-      previous: quote.previousClose != null
-        ? { date: null, value: quote.previousClose }
-        : null,
+      provider: historyResult.provider || 'Unknown',
+      latest: latestPoint,
+      previous: previousPoint,
       series,
     });
   } catch (error) {
