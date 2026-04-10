@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { BLS_SERIES, CHART_EXPLANATIONS, FRED_SERIES, MARKET_ASSETS, SECTOR_ASSETS } from './mappings.js';
-import { fetchBlsSeries } from './services/bls.js';
+import { fetchBlsSeriesBatch } from './services/bls.js';
 import {
   average,
   cleanSeries,
@@ -167,18 +167,21 @@ async function buildDashboard(force = false) {
   );
   const fredMap = Object.fromEntries(fredEntries);
 
-  const blsEntries = await Promise.all(
-    Object.entries(BLS_SERIES).map(async ([key, meta]) => {
-      try {
-        const series = await fetchBlsSeries(meta.id, { yearsBack: 12, force });
-        return [key, series];
-      } catch (error) {
-        errors.push(`${meta.label}: ${error.message}`);
-        return [key, []];
-      }
-    }),
-  );
-  const blsMap = Object.fromEntries(blsEntries);
+  const blsMap = {};
+  try {
+    const blsBatch = await fetchBlsSeriesBatch(
+      Object.values(BLS_SERIES).map((meta) => meta.id),
+      { yearsBack: 12, force },
+    );
+
+    for (const [key, meta] of Object.entries(BLS_SERIES)) {
+      blsMap[key] = blsBatch[meta.id] || [];
+    }
+  } catch (error) {
+    for (const [, meta] of Object.entries(BLS_SERIES)) {
+      errors.push(`${meta.label}: ${error.message}`);
+    }
+  }
 
   let nominalCurveRows = [];
   let realCurveRows = [];
