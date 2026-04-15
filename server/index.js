@@ -99,24 +99,42 @@ async function resolveMarketAsset(asset, force, errors) {
     }
 
     if (asset.provider === 'stooq') {
-      if (marketPriceProvider === 'alphavantage') {
-        return await fetchAlphaVantageEquity(asset.symbol, { force });
-      }
-
-      if (marketPriceProvider === 'fmp') {
-        try {
-          return await fetchFmpHistory(asset.symbol, { force });
-        } catch (error) {
-          const msg = String(error.message || error);
-          if (msg.includes('402') || msg.includes('403') || msg.toLowerCase().includes('premium')) {
-            return await fetchAlphaVantageEquity(asset.symbol, { force });
-          }
-          throw error;
-        }
-      }
-
-      return await fetchStooqHistory(asset.providerSymbol, { force });
+    if (marketPriceProvider === 'alphavantage') {
+      return await fetchAlphaVantageEquity(asset.symbol, { force });
     }
+
+    if (marketPriceProvider === 'fmp') {
+      try {
+        const fmpSeries = await fetchFmpHistory(asset.symbol, { force });
+        if (fmpSeries.length) return fmpSeries;
+
+        if (asset.providerSymbol) {
+          const stooqSeries = await fetchStooqHistory(asset.providerSymbol, { force });
+          if (stooqSeries.length) return stooqSeries;
+        }
+
+        return fmpSeries;
+      } catch (error) {
+        if (asset.providerSymbol) {
+          try {
+            const stooqSeries = await fetchStooqHistory(asset.providerSymbol, { force });
+            if (stooqSeries.length) return stooqSeries;
+          } catch {
+          // ignore and continue to original error handling
+          }
+        }
+
+        const msg = String(error.message || error);
+        if (msg.includes('402') || msg.includes('403') || msg.toLowerCase().includes('premium')) {
+          return await fetchAlphaVantageEquity(asset.symbol, { force });
+        }
+
+        throw error;
+      }
+    }
+
+    return await fetchStooqHistory(asset.providerSymbol, { force });
+  }
 
     return [];
   } catch (error) {
