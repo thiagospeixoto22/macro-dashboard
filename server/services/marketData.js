@@ -61,13 +61,27 @@ export async function fetchFmpHistory(symbol, options = {}) {
       if (json?.Error) throw new Error(`FMP error: ${json.Error}`);
       if (json?.message) throw new Error(`FMP error: ${json.message}`);
 
-      const rows = Array.isArray(json)
+      let rows = Array.isArray(json)
         ? json
         : Array.isArray(json?.historical)
           ? json.historical
           : Array.isArray(json?.data)
             ? json.data
             : [];
+
+      if (!rows.length) {
+        const etfUrl = `https://financialmodelingprep.com/api/v3/historical-price-full/${encodeURIComponent(
+          upper,
+        )}?apikey=${encodeURIComponent(apiKey)}`;
+
+        const etfJson = await fetchJson(etfUrl);
+
+        if (etfJson?.['Error Message']) throw new Error(`FMP ETF error: ${etfJson['Error Message']}`);
+        if (etfJson?.Error) throw new Error(`FMP ETF error: ${etfJson.Error}`);
+        if (etfJson?.message) throw new Error(`FMP ETF error: ${etfJson.message}`);
+
+        rows = Array.isArray(etfJson?.historical) ? etfJson.historical : [];
+      }
 
       return rows
         .map((row) => ({
@@ -76,10 +90,6 @@ export async function fetchFmpHistory(symbol, options = {}) {
         }))
         .filter((row) => row.date && Number.isFinite(row.value))
         .sort((a, b) => new Date(a.date) - new Date(b.date));
-    },
-    options.force,
-  );
-}
 
 export async function fetchAlphaVantageCommodity(config, options = {}) {
   const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
