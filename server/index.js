@@ -168,22 +168,28 @@ async function buildDashboard(force = false) {
   const marketMap = Object.fromEntries(marketHistories);
   const sectorMap = Object.fromEntries(sectorHistories);
 
-  const fredEntries = await Promise.all(
-    Object.entries(FRED_SERIES).map(async ([key, meta]) => {
-      try {
-        let series = await fetchFredSeries(meta.id, { observationStart: '2018-01-01', force });
-        // Apply divisor if defined (WALCL and M2SL are reported in millions by FRED, convert to billions)
-        if (meta.divisor && meta.divisor !== 1) {
-          series = series.map((point) => ({ ...point, value: point.value / meta.divisor }));
-        }
-        return [key, series];
-      } catch (error) {
-        errors.push(`${meta.label}: ${error.message}`);
-        return [key, []];
+  const fredMap = {};
+
+  for (const [key, meta] of Object.entries(FRED_SERIES)) {
+    try {
+      let series = await fetchFredSeries(meta.id, {
+        observationStart: '2018-01-01',
+        force,
+      });
+
+      if (meta.divisor && meta.divisor !== 1) {
+        series = series.map((point) => ({
+          ...point,
+          value: point.value / meta.divisor,
+        }));
       }
-    }),
-  );
-  const fredMap = Object.fromEntries(fredEntries);
+
+      fredMap[key] = series;
+    } catch (error) {
+      errors.push(`${meta.label}: ${error.message}`);
+      fredMap[key] = [];
+    }
+  }
 
   const blsMap = {};
   try {
