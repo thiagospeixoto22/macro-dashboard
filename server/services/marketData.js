@@ -90,6 +90,10 @@ export async function fetchFmpHistory(symbol, options = {}) {
         }))
         .filter((row) => row.date && Number.isFinite(row.value))
         .sort((a, b) => new Date(a.date) - new Date(b.date));
+          },
+          options.force,
+        );
+      }
 
 export async function fetchAlphaVantageCommodity(config, options = {}) {
   const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
