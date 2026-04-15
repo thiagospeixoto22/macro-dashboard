@@ -5,11 +5,84 @@ import { fetchJson, fetchText } from './http.js';
 const TTL = 60 * 60 * 1000;
 
 function parseStooqCsv(csv) {
+  if (csv.toLowerCase().includes('get your apikey')) {
+    throw new Error('Stooq CSV now requires an API key for this symbol');
+  }
+
   const parsed = Papa.parse(csv, { header: true, skipEmptyLines: true });
   return (parsed.data || [])
     .map((row) => ({ date: row.Date, value: Number(row.Close) }))
     .filter((row) => row.date && Number.isFinite(row.value))
     .sort((a, b) => new Date(a.date) - new Date(b.date));
+}
+
+function dateFromUnixSeconds(seconds) {
+  return new Date(seconds * 1000).toISOString().slice(0, 10);
+}
+
+export async function fetchYahooHistory(symbol, options = {}) {
+  const upper = symbol.trim().toUpperCase();
+  const cacheKey = `yahoo_history_${upper}`;
+
+  return withCache(
+    cacheKey,
+    TTL,
+    async () => {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+        upper,
+      )}?range=5y&interval=1d`;
+
+      const json = await fetchJson(url);
+      const result = json?.chart?.result?.[0];
+      const error = json?.chart?.error;
+
+      if (error) {
+        throw new Error(`Yahoo error for ${upper}: ${error.description || error.code || 'unknown error'}`);
+      }
+
+      const timestamps = result?.timestamp || [];
+      const quote = result?.indicators?.quote?.[0] || {};
+      const adjusted = result?.indicators?.adjclose?.[0]?.adjclose || [];
+      const close = quote.close || [];
+
+      return timestamps
+        .map((timestamp, index) => ({
+          date: dateFromUnixSeconds(timestamp),
+          value: Number(adjusted[index] ?? close[index]),
+        }))
+        .filter((row) => row.date && Number.isFinite(row.value))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+    },
+    options.force,
+  );
+}
+
+export async function fetchStooqThenYahoo(symbols, options = {}) {
+  const candidates = symbols.filter(Boolean);
+  let lastError;
+
+  for (const symbol of candidates) {
+    try {
+      const series = await fetchStooqHistory(symbol, options);
+      if (series.length) return { provider: 'Stooq', providerSymbol: symbol, series };
+      lastError = new Error(`Stooq returned no rows for ${symbol}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  for (const symbol of candidates) {
+    const yahooSymbol = symbol.replace(/\.us$/i, '').toUpperCase();
+    try {
+      const series = await fetchYahooHistory(yahooSymbol, options);
+      if (series.length) return { provider: 'Yahoo Finance', providerSymbol: yahooSymbol, series };
+      lastError = new Error(`Yahoo Finance returned no rows for ${yahooSymbol}`);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError || new Error('No market data candidates were provided');
 }
 
 export async function fetchStooqHistory(providerSymbol, options = {}) {
@@ -307,19 +380,10 @@ export async function fetchGenericTickerHistory(symbol, options = {}) {
   const normalized = symbol.trim().toLowerCase();
   const candidates = normalized.includes('.') ? [normalized] : [`${normalized}.us`, normalized];
 
-  for (const candidate of candidates) {
-    try {
-      const series = await fetchStooqHistory(candidate, options);
-      if (series.length) {
-        return {
-          provider: 'Stooq',
-          providerSymbol: candidate,
-          series,
-        };
-      }
-    } catch {
-      // try next candidate
-    }
+  try {
+    return await fetchStooqThenYahoo(candidates, options);
+  } catch {
+    // Continue to Alpha Vantage if the user supplied a key.
   }
 
   const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
