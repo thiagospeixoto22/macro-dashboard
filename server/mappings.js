@@ -5,6 +5,7 @@ export const MARKET_ASSETS = [
     symbol: 'SPX',
     provider: 'fred',
     seriesId: 'SP500',
+    yahooSymbol: 'SPY',
     chartType: 'price',
     explanation:
       'Official S&P 500 daily close index from FRED.',
@@ -16,6 +17,7 @@ export const MARKET_ASSETS = [
     symbol: 'NDX',
     provider: 'fred',
     seriesId: 'NASDAQ100',
+    yahooSymbol: 'QQQ',
     chartType: 'price',
     explanation:
       'Official Nasdaq-100 daily close index from FRED.',
@@ -27,6 +29,7 @@ export const MARKET_ASSETS = [
     symbol: 'SMALLCAP',
     provider: 'fred',
     seriesId: 'NASDAQNQUSS',
+    yahooSymbol: 'IWM',
     chartType: 'price',
     explanation:
       'Free daily small-cap proxy using the Nasdaq US Small Cap Index.',
@@ -38,6 +41,7 @@ export const MARKET_ASSETS = [
     symbol: 'DM',
     provider: 'fred',
     seriesId: 'NASDAQNQDMN',
+    yahooSymbol: 'EFA',
     chartType: 'price',
     explanation:
       'Free developed-markets proxy using the Nasdaq Developed Markets Net Total Return Index.',
@@ -48,10 +52,11 @@ export const MARKET_ASSETS = [
     name: 'Gold',
     symbol: 'GCUSD',
     provider: 'stooq',
+    yahooSymbol: 'GC=F',
     chartType: 'price',
     explanation:
-      'Gold commodity history from FMP using the GCUSD symbol.',
-    sourceLabel: 'FMP / GCUSD',
+      'Gold futures history used as a daily gold proxy.',
+    sourceLabel: 'Stooq / Yahoo Finance gold proxy',
   },
   {
     id: 'copper',
@@ -59,6 +64,7 @@ export const MARKET_ASSETS = [
     symbol: 'COPPER',
     provider: 'fred',
     seriesId: 'PCOPPUSDM',
+    yahooSymbol: 'HG=F',
     chartType: 'price',
     explanation:
       'Global copper benchmark price from FRED/IMF. Monthly frequency, so this card must be labeled as a slower-moving macro signal rather than a live daily market price.',
@@ -70,6 +76,7 @@ export const MARKET_ASSETS = [
     symbol: 'WTI',
     provider: 'fred',
     seriesId: 'DCOILWTICO',
+    yahooSymbol: 'CL=F',
     chartType: 'price',
     explanation:
       'Official daily WTI Cushing spot price from FRED/EIA.',
@@ -81,6 +88,7 @@ export const MARKET_ASSETS = [
     symbol: 'DXY Proxy',
     provider: 'fred',
     seriesId: 'DTWEXBGS',
+    yahooSymbol: 'DX-Y.NYB',
     chartType: 'price',
     explanation:
       'Nominal Broad U.S. Dollar Index from FRED. This is a stronger free macro dollar measure than a fragile ETF proxy.',
@@ -92,6 +100,7 @@ export const MARKET_ASSETS = [
     symbol: 'EUR/USD',
     provider: 'fred',
     seriesId: 'DEXUSEU',
+    yahooSymbol: 'EURUSD=X',
     chartType: 'price',
     explanation:
       'Official daily EUR/USD proxy from FRED H.10; quoted as U.S. dollars to one euro.',
@@ -103,6 +112,7 @@ export const MARKET_ASSETS = [
     symbol: 'USD/JPY',
     provider: 'fred',
     seriesId: 'DEXJPUS',
+    yahooSymbol: 'JPY=X',
     chartType: 'price',
     explanation:
       'Official daily USD/JPY proxy from FRED H.10; quoted as Japanese yen to one U.S. dollar.',
@@ -364,7 +374,7 @@ export const CHART_EXPLANATIONS = {
   inflation:
     'Inflation combines BLS price and labor releases with market-implied breakevens and a commodity basket signal to distinguish cooling from reacceleration.',
   sectors:
-    'Sector leadership now uses FRED-hosted Nasdaq sector index series instead of fragile ETF proxies, which makes relative-strength and breadth calculations much more stable.',
+    'Sector leadership uses liquid ETF proxies with a no-key Yahoo Finance fallback when Stooq CSV is unavailable.',
   breadth:
     'Breadth uses transparent free-data proxies because full institutional breadth tapes are not broadly free. This app shows percentage above moving averages, positive-return breadth, and cyclicals-vs-defensives rotation.',
   thesis:

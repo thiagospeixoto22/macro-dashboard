@@ -18,8 +18,11 @@ function normalizeBlsRows(rows = []) {
 export async function fetchBlsSeriesBatch(seriesIds, options = {}) {
   const ids = [...new Set(seriesIds)];
   const endYear = new Date().getFullYear();
-  const startYear = endYear - (options.yearsBack || 12);
-  const cacheKey = `bls_batch_${ids.slice().sort().join('_')}_${startYear}_${endYear}`;
+  const requestedYearsBack = options.yearsBack || 12;
+  const hasApiKey = Boolean(process.env.BLS_API_KEY);
+  const yearsBack = hasApiKey ? requestedYearsBack : Math.min(requestedYearsBack, 9);
+  const startYear = endYear - yearsBack;
+  const cacheKey = `bls_batch_${ids.slice().sort().join('_')}_${startYear}_${endYear}_${hasApiKey ? 'keyed' : 'public'}`;
 
   return withCache(
     cacheKey,

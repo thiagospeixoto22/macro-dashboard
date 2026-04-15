@@ -31,7 +31,8 @@ import {
   fetchAlphaVantageFx,
   fetchFmpHistory,
   fetchGenericTickerHistory,
-  fetchStooqHistory,
+  fetchYahooHistory,
+  fetchStooqThenYahoo,
 } from './services/marketData.js';
 import { fetchTreasuryCurve, pickTenorSeries } from './services/treasury.js';
 
@@ -63,31 +64,41 @@ function createDerivedSeries(seriesA, seriesB, operator) {
 }
 
 function getMarketPriceProvider() {
-  return (process.env.MARKET_PRICE_PROVIDER || 'fmp').toLowerCase();
+  return (process.env.MARKET_PRICE_PROVIDER || 'stooq').toLowerCase();
 }
 
 function marketProviderSourceLabel(asset, provider) {
   if (
-    asset.provider === 'fred' ||
     asset.provider === 'alphaVantageFx' ||
     asset.provider === 'alphaVantageCommodity'
   ) {
     return asset.sourceLabel;
   }
+  if (asset.provider === 'fred' && asset.yahooSymbol) return `${asset.sourceLabel} / Yahoo Finance ${asset.yahooSymbol} fallback`;
+  if (asset.provider === 'fred') return asset.sourceLabel;
   if (provider === 'fmp') return `FMP primary / Alpha Vantage fallback / ${asset.symbol} proxy`;
   if (provider === 'alphavantage') return `Alpha Vantage / ${asset.symbol} proxy`;
+  if (asset.provider === 'stooq') return `Stooq primary / Yahoo Finance fallback / ${asset.symbol} proxy`;
   return asset.sourceLabel;
 }
 
 async function resolveMarketAsset(asset, force, errors) {
   const marketPriceProvider = getMarketPriceProvider();
+  const stooqYahooCandidates = [asset.providerSymbol, asset.yahooSymbol, asset.symbol].filter(Boolean);
 
   try {
     if (asset.provider === 'fred') {
-      return await fetchFredSeries(asset.seriesId, {
-        observationStart: '2018-01-01',
-        force,
-      });
+      try {
+        return await fetchFredSeries(asset.seriesId, {
+          observationStart: '2018-01-01',
+          force,
+        });
+      } catch (error) {
+        if (!asset.yahooSymbol) throw error;
+        const series = await fetchYahooHistory(asset.yahooSymbol, { force });
+        if (series.length) return series;
+        throw error;
+      }
     }
 
     if (asset.provider === 'alphaVantageCommodity') {
@@ -99,42 +110,34 @@ async function resolveMarketAsset(asset, force, errors) {
     }
 
     if (asset.provider === 'stooq') {
-    if (marketPriceProvider === 'alphavantage') {
-      return await fetchAlphaVantageEquity(asset.symbol, { force });
-    }
-
-    if (marketPriceProvider === 'fmp') {
-      try {
-        const fmpSeries = await fetchFmpHistory(asset.symbol, { force });
-        if (fmpSeries.length) return fmpSeries;
-
-        if (asset.providerSymbol) {
-          const stooqSeries = await fetchStooqHistory(asset.providerSymbol, { force });
-          if (stooqSeries.length) return stooqSeries;
-        }
-
-        return fmpSeries;
-      } catch (error) {
-        if (asset.providerSymbol) {
-          try {
-            const stooqSeries = await fetchStooqHistory(asset.providerSymbol, { force });
-            if (stooqSeries.length) return stooqSeries;
-          } catch {
-          // ignore and continue to original error handling
-          }
-        }
-
-        const msg = String(error.message || error);
-        if (msg.includes('402') || msg.includes('403') || msg.toLowerCase().includes('premium')) {
-          return await fetchAlphaVantageEquity(asset.symbol, { force });
-        }
-
-        throw error;
+      if (marketPriceProvider === 'alphavantage') {
+        return await fetchAlphaVantageEquity(asset.symbol, { force });
       }
-    }
 
-    return await fetchStooqHistory(asset.providerSymbol, { force });
-  }
+      if (marketPriceProvider === 'fmp') {
+        try {
+          const fmpSeries = await fetchFmpHistory(asset.symbol, { force });
+          if (fmpSeries.length) return fmpSeries;
+
+          return (await fetchStooqThenYahoo(stooqYahooCandidates, { force })).series;
+        } catch (error) {
+          try {
+            return (await fetchStooqThenYahoo(stooqYahooCandidates, { force })).series;
+          } catch {
+            // ignore and continue to original error handling
+          }
+
+          const msg = String(error.message || error);
+          if (msg.includes('402') || msg.includes('403') || msg.toLowerCase().includes('premium')) {
+            return await fetchAlphaVantageEquity(asset.symbol, { force });
+          }
+
+          throw error;
+        }
+      }
+
+      return (await fetchStooqThenYahoo(stooqYahooCandidates, { force })).series;
+    }
 
     return [];
   } catch (error) {
@@ -697,7 +700,7 @@ async function buildDashboard(force = false) {
           ? 'Broad ETF/sector market prices use FMP daily history first, with Alpha Vantage fallback when a free-plan FMP entitlement is unavailable. FX pairs still use Alpha Vantage directly.'
           : marketPriceProvider === 'alphavantage'
             ? 'Broad ETF/sector market prices are using Alpha Vantage daily history. FX pairs also use Alpha Vantage directly.'
-            : 'Broad ETF/sector market prices default to Stooq daily history because the Alpha Vantage free tier is too restrictive for a 15+ symbol dashboard. FX pairs still use Alpha Vantage directly.',
+            : 'Broad ETF/sector market prices use Stooq first, then Yahoo Finance chart data when Stooq does not return CSV rows. This avoids relying on the Alpha Vantage free tier for a 15+ symbol dashboard.',
       breadthProxy:
         'Breadth/positioning uses transparent free-data proxies: percentage above moving averages, positive-return breadth, sector rotation, VIX, and NFCI.',
     },
