@@ -50,6 +50,10 @@ function formatChange(value, unit) {
   return `${value >= 0 ? '+' : ''}${formatNumber(value, 2)}%`;
 }
 
+function formatPercent(value, digits = 2) {
+  return Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${formatNumber(value, digits)}%` : '—';
+}
+
 function statusClass(status) {
   if (!status) return 'neutral';
   const lower = String(status).toLowerCase();
@@ -290,6 +294,84 @@ function MetricsStrip({ items }) {
 function HeatmapCell({ value }) {
   const tone = !Number.isFinite(value) ? 'neutral' : value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral';
   return <td className={`heat-cell ${tone}`}>{Number.isFinite(value) ? formatNumber(value, 2) : '—'}</td>;
+}
+
+function EmptyState({ children }) {
+  return <div className="empty-state">{children}</div>;
+}
+
+function ToneValue({ value, suffix = '', digits = 2 }) {
+  const tone = !Number.isFinite(value) ? 'neutral' : value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral';
+  return (
+    <span className={`tone-value ${tone}`}>
+      {Number.isFinite(value) ? `${value >= 0 ? '+' : ''}${formatNumber(value, digits)}${suffix}` : '—'}
+    </span>
+  );
+}
+
+function SectorSnapshotGrid({ rows = [], onOpen }) {
+  if (!rows.length) {
+    return <EmptyState>Sector data is loading. Try Refresh data if this persists.</EmptyState>;
+  }
+
+  return (
+    <div className="sector-snapshot-grid">
+      {rows.map((row, index) => (
+        <button type="button" className="sector-snapshot-card" key={row.id} onClick={() => onOpen(row.id)}>
+          <div className="snapshot-rank">#{index + 1}</div>
+          <div>
+            <h3>{row.name}</h3>
+            <span>{row.symbol || 'ETF proxy'} · {row.latestDate || 'latest pending'}</span>
+          </div>
+          <div className="snapshot-metrics">
+            <div><span>RS 3M</span><strong><ToneValue value={row.relativeStrength ?? row.relative3M} suffix="%" /></strong></div>
+            <div><span>3M</span><strong><ToneValue value={row.threeMonths} suffix="%" /></strong></div>
+            <div><span>Score</span><strong>{formatNumber(row.leadershipScore ?? row.score, 1)}</strong></div>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RotationHeatmapGrid({ rows = [], onOpen }) {
+  if (!rows.length) {
+    return <EmptyState>Sector rotation data is loading. Try Refresh data if this persists.</EmptyState>;
+  }
+
+  return (
+    <div className="rotation-grid">
+      {rows.map((row) => (
+        <button type="button" className="rotation-tile" key={row.id} onClick={() => onOpen(row.id)}>
+          <div>
+            <h4>{row.name}</h4>
+            <span>{row.symbol || 'Sector proxy'}</span>
+          </div>
+          <div className="rotation-values">
+            <span>1M <ToneValue value={row.oneMonth} suffix="%" /></span>
+            <span>3M <ToneValue value={row.threeMonths} suffix="%" /></span>
+            <span>RS 3M <ToneValue value={row.relative3M} suffix="%" /></span>
+          </div>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function CrossAssetSignalCard({ item, featured = false }) {
+  return (
+    <div className={featured ? 'panel cross-panel featured' : 'panel cross-panel'}>
+      <div className="panel-head">
+        <h3>{item.title}</h3>
+        <Badge tone={statusClass(item.verdict)}>{item.verdict}</Badge>
+      </div>
+      <p>{item.explanation}</p>
+      <div className="stat-grid compact two-up">
+        <div><span>60D corr</span><strong>{Number.isFinite(item.correlation60d) ? formatNumber(item.correlation60d, 2) : '—'}</strong></div>
+        <div><span>3M gap</span><strong>{Number.isFinite(item.returnGap3m) ? formatNumber(item.returnGap3m, 2) : '—'}</strong></div>
+      </div>
+    </div>
+  );
 }
 
 function CorrelationCell({ value }) {
@@ -717,8 +799,13 @@ export default function App() {
   const liquidity = dashboard.sections.liquidity;
   const inflation = dashboard.sections.inflation;
   const breadth = dashboard.sections.breadth;
-  const crossAsset = dashboard.sections.crossAsset;
-  const sectors = dashboard.sections.sectors.leaders;
+  const crossAsset = dashboard.sections.crossAsset || [];
+  const sectors = dashboard.sections.sectors.leaders || [];
+  const sectorHeatmapRows = breadth.sectorHeatmap?.length ? breadth.sectorHeatmap : sectors;
+  const featuredSignalIds = ['copper_vs_industrials', 'em_vs_dollar'];
+  const featuredCrossAsset = featuredSignalIds
+    .map((id) => crossAsset.find((item) => item.id === id))
+    .filter(Boolean);
 
   const yieldCurveData = {
     labels: rates.yieldCurve.map((point) => point.tenor),
@@ -928,6 +1015,7 @@ export default function App() {
       </SectionShell>
 
       <SectionShell title="5) Leading Economic Sectors" subtitle={dashboard.explanations.sectors}>
+        <SectorSnapshotGrid rows={sectors} onOpen={setSelectedChart} />
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -943,39 +1031,40 @@ export default function App() {
               </tr>
             </thead>
             <tbody>
-              {sectors.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <button type="button" className="link-button" onClick={() => setSelectedChart(row.id)}>{row.name}</button>
-                  </td>
-                  <td>{Number.isFinite(row.relativeStrength) ? formatNumber(row.relativeStrength, 2) + '%' : '—'}</td>
-                  <td>{Number.isFinite(row.oneMonth) ? formatNumber(row.oneMonth, 2) + '%' : '—'}</td>
-                  <td>{Number.isFinite(row.threeMonths) ? formatNumber(row.threeMonths, 2) + '%' : '—'}</td>
-                  <td>{Number.isFinite(row.sixMonths) ? formatNumber(row.sixMonths, 2) + '%' : '—'}</td>
-                  <td><Badge tone={statusClass(row.trend)}>{row.trend}</Badge></td>
-                  <td>{formatNumber(row.leadershipScore, 1)}</td>
-                  <td>{row.sourceLabel}</td>
-                </tr>
-              ))}
+              {sectors.length ? (
+                sectors.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <button type="button" className="link-button" onClick={() => setSelectedChart(row.id)}>{row.name}</button>
+                    </td>
+                    <td>{formatPercent(row.relativeStrength)}</td>
+                    <td>{formatPercent(row.oneMonth)}</td>
+                    <td>{formatPercent(row.threeMonths)}</td>
+                    <td>{formatPercent(row.sixMonths)}</td>
+                    <td><Badge tone={statusClass(row.trend)}>{row.trend}</Badge></td>
+                    <td>{formatNumber(row.leadershipScore, 1)}</td>
+                    <td>{row.sourceLabel}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr><td colSpan="8">Sector data is loading. Try Refresh data if this persists.</td></tr>
+              )}
             </tbody>
           </table>
         </div>
       </SectionShell>
 
       <SectionShell title="6) Global Macro Cross-Asset Signals" subtitle="Highlights where market relationships are confirming or contradicting the macro tape.">
+        {featuredCrossAsset.length ? (
+          <div className="featured-signal-grid">
+            {featuredCrossAsset.map((item) => (
+              <CrossAssetSignalCard key={`featured-${item.id}`} item={item} featured />
+            ))}
+          </div>
+        ) : null}
         <div className="cross-grid">
           {crossAsset.map((item) => (
-            <div key={item.id} className="panel cross-panel">
-              <div className="panel-head">
-                <h3>{item.title}</h3>
-                <Badge tone={statusClass(item.verdict)}>{item.verdict}</Badge>
-              </div>
-              <p>{item.explanation}</p>
-              <div className="stat-grid compact two-up">
-                <div><span>60D corr</span><strong>{Number.isFinite(item.correlation60d) ? formatNumber(item.correlation60d, 2) : '—'}</strong></div>
-                <div><span>3M gap</span><strong>{Number.isFinite(item.returnGap3m) ? formatNumber(item.returnGap3m, 2) : '—'}</strong></div>
-              </div>
-            </div>
+            <CrossAssetSignalCard key={item.id} item={item} />
           ))}
         </div>
       </SectionShell>
@@ -998,6 +1087,7 @@ export default function App() {
               <h3>Sector rotation heatmap</h3>
               <span className="metric-source">Tracked ETF proxy set</span>
             </div>
+            <RotationHeatmapGrid rows={sectorHeatmapRows} onOpen={setSelectedChart} />
             <div className="table-wrap">
               <table className="data-table compact-table">
                 <thead>
@@ -1011,16 +1101,20 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {breadth.sectorHeatmap.map((row) => (
-                    <tr key={row.id}>
-                      <td><button type="button" className="link-button" onClick={() => setSelectedChart(row.id)}>{row.name}</button></td>
-                      <HeatmapCell value={row.oneMonth} />
-                      <HeatmapCell value={row.threeMonths} />
-                      <HeatmapCell value={row.relative1M} />
-                      <HeatmapCell value={row.relative3M} />
-                      <HeatmapCell value={row.score} />
-                    </tr>
-                  ))}
+                  {sectorHeatmapRows.length ? (
+                    sectorHeatmapRows.map((row) => (
+                      <tr key={row.id}>
+                        <td><button type="button" className="link-button" onClick={() => setSelectedChart(row.id)}>{row.name}</button></td>
+                        <HeatmapCell value={row.oneMonth} />
+                        <HeatmapCell value={row.threeMonths} />
+                        <HeatmapCell value={row.relative1M} />
+                        <HeatmapCell value={row.relative3M} />
+                        <HeatmapCell value={row.score ?? row.leadershipScore} />
+                      </tr>
+                    ))
+                  ) : (
+                    <tr><td colSpan="6">Sector rotation data is loading. Try Refresh data if this persists.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
