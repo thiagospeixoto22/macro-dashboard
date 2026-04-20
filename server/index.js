@@ -46,6 +46,10 @@ const app = express();
 const port = Number(process.env.PORT || 8787);
 
 app.use(express.json({ limit: '2mb' }));
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, max-age=0');
+  next();
+});
 
 function latest(series) {
   return cleanSeries(series).at(-1) || null;
@@ -256,13 +260,12 @@ async function buildDashboard(force = false) {
 
   const sectorCards = resolvedSectorAssets.map((asset) => computeAssetCard(asset, sectorMap[asset.id] || []));
   const benchmarkSeries = marketMap.sp500 || [];
-  const leadingSectorRows = sectorHeatmapRows(
-    sectorCards.filter((card) =>
-      ['homebuilders', 'transports', 'retail', 'semis', 'regionalBanks'].includes(card.id),
-    ),
-    benchmarkSeries,
-  );
   const sectorHeatmap = sectorHeatmapRows(sectorCards, benchmarkSeries);
+  const leadingSectorRows = [...sectorHeatmap].sort((a, b) => {
+    const scoreA = Number.isFinite(a.score) ? a.score : Number.NEGATIVE_INFINITY;
+    const scoreB = Number.isFinite(b.score) ? b.score : Number.NEGATIVE_INFINITY;
+    return scoreB - scoreA;
+  });
 
   const commodityBasket = makeCommodityBasket(marketMap.gold || [], marketMap.copper || [], marketMap.crude || []);
 

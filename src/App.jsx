@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Papa from 'papaparse';
 import {
   Chart as ChartJS,
@@ -18,6 +18,8 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarEleme
 const POSITIONS_KEY = 'macro-dashboard-positions-v1';
 const NOTES_KEY = 'macro-dashboard-notes-v1';
 const RANGES = ['1W', '1M', '3M', '6M', 'YTD', '1Y', '5Y', 'MAX'];
+const AUTO_REFRESH_MS = 30 * 60 * 1000;
+const FOCUS_REFRESH_MS = 10 * 60 * 1000;
 
 function formatNumber(value, digits = 2) {
   return Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits }) : '—';
@@ -634,26 +636,55 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [selectedChart, setSelectedChart] = useState('');
+  const lastLoadedAtRef = useRef(0);
 
-  const loadDashboard = async (force = false) => {
+  const loadDashboard = useCallback(async (force = false) => {
     try {
       force ? setRefreshing(true) : setLoading(true);
       setError('');
-      const response = await fetch(`/api/dashboard${force ? '?force=1' : ''}`);
+      const params = new URLSearchParams();
+      if (force) {
+        params.set('force', '1');
+        params.set('t', String(Date.now()));
+      }
+      const query = params.toString();
+      const response = await fetch(`/api/dashboard${query ? `?${query}` : ''}`, { cache: 'no-store' });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || 'Failed to load dashboard');
       setDashboard(json);
+      lastLoadedAtRef.current = Date.now();
     } catch (err) {
       setError(err.message || 'Failed to load dashboard');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadDashboard(false);
-  }, []);
+    loadDashboard(true);
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      loadDashboard(true);
+    }, AUTO_REFRESH_MS);
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - lastLoadedAtRef.current < FOCUS_REFRESH_MS) return;
+      loadDashboard(true);
+    };
+
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+    window.addEventListener('focus', refreshWhenVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+      window.removeEventListener('focus', refreshWhenVisible);
+    };
+  }, [loadDashboard]);
 
   const chartables = dashboard?.sections?.chartables || {};
   const selectedChartable = selectedChart ? chartables[selectedChart] : null;
@@ -742,7 +773,7 @@ export default function App() {
             <span>Inflation</span>
             <strong>{dashboard.summary.inflationRegime}</strong>
           </div>
-          <button type="button" className="ghost-button" onClick={() => loadDashboard(true)}>
+          <button type="button" className="ghost-button" onClick={() => loadDashboard(true)} disabled={refreshing}>
             {refreshing ? 'Refreshing…' : 'Refresh data'}
           </button>
         </div>

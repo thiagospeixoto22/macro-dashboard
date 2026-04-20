@@ -13,6 +13,14 @@ function normalizeRow(row) {
   return normalized;
 }
 
+function numberFrom(row, keys) {
+  for (const key of keys) {
+    const value = Number(row[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
 async function fetchTreasuryCsv(type, year) {
   const url = `https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/${year}/all?type=${type}&field_tdr_date_value=${year}&page&_format=csv`;
   return fetchText(url);
@@ -23,7 +31,7 @@ export async function fetchTreasuryCurve(type, options = {}) {
   const yearsBack = options.yearsBack || 5;
   const years = [];
   for (let year = currentYear - yearsBack; year <= currentYear; year += 1) years.push(year);
-  const cacheKey = `treasury_${type}_${years.join('_')}`;
+  const cacheKey = `treasury_v2_${type}_${years.join('_')}`;
 
   return withCache(
     cacheKey,
@@ -38,19 +46,19 @@ export async function fetchTreasuryCurve(type, options = {}) {
       return allRows
         .map((row) => ({
           date: row.Date || row.DATE,
-          oneMonth: Number(row['1 Mo']),
-          twoMonth: Number(row['2 Mo']),
-          threeMonth: Number(row['3 Mo']),
-          fourMonth: Number(row['4 Mo']),
-          sixMonth: Number(row['6 Mo']),
-          oneYear: Number(row['1 Yr']),
-          twoYear: Number(row['2 Yr']),
-          threeYear: Number(row['3 Yr']),
-          fiveYear: Number(row['5 Yr']),
-          sevenYear: Number(row['7 Yr']),
-          tenYear: Number(row['10 Yr']),
-          twentyYear: Number(row['20 Yr']),
-          thirtyYear: Number(row['30 Yr']),
+          oneMonth: numberFrom(row, ['1 Mo', '1 MO']),
+          twoMonth: numberFrom(row, ['2 Mo', '2 MO']),
+          threeMonth: numberFrom(row, ['3 Mo', '3 MO']),
+          fourMonth: numberFrom(row, ['4 Mo', '4 MO']),
+          sixMonth: numberFrom(row, ['6 Mo', '6 MO']),
+          oneYear: numberFrom(row, ['1 Yr', '1 YR']),
+          twoYear: numberFrom(row, ['2 Yr', '2 YR']),
+          threeYear: numberFrom(row, ['3 Yr', '3 YR']),
+          fiveYear: numberFrom(row, ['5 Yr', '5 YR']),
+          sevenYear: numberFrom(row, ['7 Yr', '7 YR']),
+          tenYear: numberFrom(row, ['10 Yr', '10 YR']),
+          twentyYear: numberFrom(row, ['20 Yr', '20 YR']),
+          thirtyYear: numberFrom(row, ['30 Yr', '30 YR']),
         }))
         .filter((row) => row.date)
         .sort((a, b) => new Date(a.date) - new Date(b.date));

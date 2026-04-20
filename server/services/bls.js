@@ -8,7 +8,7 @@ function normalizeBlsRows(rows = []) {
   return rows
     .filter((row) => String(row.period).startsWith('M') && row.period !== 'M13')
     .map((row) => ({
-      date: `${row.year}-${String(row.period).replace('M', '')}-01`,
+      date: `${row.year}-${String(row.period).replace('M', '').padStart(2, '0')}-01`,
       value: Number(row.value),
     }))
     .filter((row) => Number.isFinite(row.value))
@@ -44,6 +44,11 @@ export async function fetchBlsSeriesBatch(seriesIds, options = {}) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
+
+      if (json?.status && String(json.status).toUpperCase() !== 'REQUEST_SUCCEEDED') {
+        const messages = Array.isArray(json.message) ? json.message.join('; ') : json.message;
+        throw new Error(`BLS ${json.status}: ${messages || 'request failed'}`);
+      }
 
       const seriesList = json?.Results?.series || [];
       const out = Object.fromEntries(ids.map((id) => [id, []]));

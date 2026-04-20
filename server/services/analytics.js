@@ -77,8 +77,43 @@ export function mergeByDate(...seriesList) {
   return [...map.values()].sort((a, b) => new Date(a.date) - new Date(b.date));
 }
 
+export function mergeByDateForwardFill(seriesList, maxLagDays = 45) {
+  const cleanList = seriesList.map((series) => cleanSeries(series));
+  if (cleanList.some((series) => !series.length)) return [];
+
+  const dates = [...new Set(cleanList.flatMap((series) => series.map((point) => point.date)))]
+    .sort((a, b) => new Date(a) - new Date(b));
+  const indexes = cleanList.map(() => 0);
+
+  return dates
+    .map((date) => {
+      const time = new Date(date).getTime();
+      const row = { date };
+
+      cleanList.forEach((series, seriesIndex) => {
+        while (
+          indexes[seriesIndex] + 1 < series.length &&
+          new Date(series[indexes[seriesIndex] + 1].date).getTime() <= time
+        ) {
+          indexes[seriesIndex] += 1;
+        }
+
+        const point = series[indexes[seriesIndex]];
+        const pointTime = new Date(point.date).getTime();
+        const lagDays = (time - pointTime) / (24 * 60 * 60 * 1000);
+
+        if (lagDays >= 0 && lagDays <= maxLagDays) {
+          row[`series${seriesIndex}`] = point.value;
+        }
+      });
+
+      return row;
+    })
+    .filter((row) => cleanList.every((_, idx) => Number.isFinite(row[`series${idx}`])));
+}
+
 export function rollingCorrelation(seriesA, seriesB, window = 60) {
-  const merged = mergeByDate(seriesA, seriesB)
+  const merged = mergeByDateForwardFill([seriesA, seriesB])
     .filter((row) => Number.isFinite(row.series0) && Number.isFinite(row.series1))
     .map((row) => ({ date: row.date, a: row.series0, b: row.series1 }));
 
@@ -236,9 +271,14 @@ export function leadershipScore(series, benchmark) {
 
 export function yoyFromLevelSeries(series) {
   const clean = cleanSeries(series);
-  return clean.map((point, index) => {
-    if (index < 12) return { date: point.date, value: null };
-    const previous = clean[index - 12]?.value;
+  const byDate = new Map(clean.map((point) => [point.date, point]));
+
+  return clean.map((point) => {
+    const pointDate = new Date(point.date);
+    pointDate.setFullYear(pointDate.getFullYear() - 1);
+    const previousDate = pointDate.toISOString().slice(0, 10);
+    const previous = byDate.get(previousDate)?.value;
+
     return {
       date: point.date,
       value: pctChange(point.value, previous),
@@ -391,7 +431,7 @@ export function macroRegime({ priceCards, sectorCards, hySpreadSeries, vixSeries
 }
 
 export function makeCommodityBasket(goldSeries, copperSeries, crudeSeries) {
-  const merged = mergeByDate(goldSeries, copperSeries, crudeSeries).filter(
+  const merged = mergeByDateForwardFill([goldSeries, copperSeries, crudeSeries]).filter(
     (row) => Number.isFinite(row.series0) && Number.isFinite(row.series1) && Number.isFinite(row.series2),
   );
   return merged.map((row) => ({
